@@ -508,6 +508,271 @@
 // }
 
 
+
+// below is working perfectly before prevalent risk factor coded by nofiupelumi
+// namespace App\Http\Controllers;
+
+// use Illuminate\Http\Request;
+// use GuzzleHttp\Client;
+// use GuzzleHttp\Exception\RequestException;
+// use Illuminate\Support\Facades\Log;
+
+// class ChatController extends Controller
+// {
+//     // Knowledge Base and Configuration
+//     private $knowledgeBase = [
+//                 "hello" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+//                 "hi" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+//                 "good morning" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+//                 "what is nigeria risk index?" => "The Nigeria Risk Index (NRI) is a security intelligence platform assessing and visualizing risks across Nigeria’s 36 states.",
+//                 "what is the interactive risk map?" => "The Interactive Risk Map provides real-time insights into security threats across different regions in Nigeria.",
+//                 "how often is nri updated?" => "NRI provides daily security updates, weekly trend analyses, and real-time risk alerts.",
+//                 "how can i contact nri for support?" => "You can contact NRI via the 'Contact Us' page or by emailing info@riskcontrolnigeria.com."
+//             ];
+    
+//     private $validYears = ["2018", "2019", "2020", "2021", "2022", "2023", "2024","2025"];
+//     private $validRiskFactors = ["Personal Threats", "Political Threats", "Property Threats", "Safety", "Violent Threats"];
+//     private $validStates = [
+//         "abia", "adamawa", "akwa ibom", "anambra", "bauchi", "bayelsa", "benue", "borno",
+//         "cross river", "delta", "ebonyi", "edo", "ekiti", "enugu", "gombe", "imo", "jigawa",
+//         "kaduna", "kano", "katsina", "kebbi", "kogi", "kwara", "lagos", "nasarawa", "niger",
+//         "ogun", "ondo", "osun", "oyo", "plateau", "rivers", "sokoto", "taraba", "yobe", "zamfara"
+//     ];
+    
+//     private $riskIndicators = [
+//         "Violent Threats" => ["Terrorism", "Kidnapping", "Armed Robbery", "Homicide", "Insurgency"],
+//         "Safety" => ["Natural_Disasters", "Fire Outbreak", "Epidemic", "Unsafe Route/Violent Attacks"],
+//         "Property Threats" => ["Burglary", "Theft", "Fraud", "Arson", "Cyber Crime"],
+//         "Political Threats" => ["Political Protest", "Political Corruption", "Electoral Violence"],
+//         "Personal Threats" => ["Assaults", "Rape", "Firearms Trafficking", "Human Trafficking"]
+//     ];
+
+//     public function chat(Request $request)
+//     {
+//         $userQuery = strtolower(trim($request->input('message')));
+        
+//         // Check knowledge base first with typing indicator simulation
+//         foreach ($this->knowledgeBase as $question => $answer) {
+//             if (strpos($userQuery, $question) !== false) {
+//                 $this->simulateTypingDelay();
+//                 return response()->json(['response' => $answer]);
+//             }
+//         }
+
+//         // Validate query parameters
+//         $validationResult = $this->validateQuery($userQuery);
+//         if ($validationResult) {
+//             return response()->json(['response' => $validationResult]);
+//         }
+
+//         // Process endpoint request
+//         list($endpoint, $params, $error) = $this->buildEndpoint($userQuery);
+//         if ($error) return response()->json(['response' => $error]);
+        
+//         if ($endpoint) {
+//             return $this->fetchRiskData($endpoint, $params, $userQuery);
+//         }
+
+//         // Final Groq fallback with knowledge base recheck
+//         return $this->askGroqAPI($userQuery, null, null, true);
+//     }
+
+//     private function validateQuery($query)
+//     {
+//         // Check for multiple years
+//         $foundYears = [];
+//         foreach ($this->validYears as $year) {
+//             if (strpos($query, $year) !== false) $foundYears[] = $year;
+//         }
+//         if (count($foundYears) > 1) {
+//             return "Please specify only one year between 2018-2025.";
+//         }
+
+//         // Check for invalid year
+//         if (!empty($foundYears)) {
+//             $year = $foundYears[0];
+//             if (!in_array($year, $this->validYears)) {
+//                 return "Please enter a valid year between 2018-2025.";
+//             }
+//         }
+
+//         // Check for multiple endpoints
+//         $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count"];
+//         $foundEndpoints = [];
+//         foreach ($endpoints as $ep) {
+//             if (strpos($query, str_replace("-", " ", $ep)) !== false) {
+//                 $foundEndpoints[] = $ep;
+//             }
+//         }
+//         if (count($foundEndpoints) > 1) {
+//             return "Please specify only one endpoint. Available options: " 
+//                    . implode(", ", array_map('ucfirst', $foundEndpoints));
+//         }
+
+//         return null;
+//     }
+
+//     private function buildEndpoint($query)
+//     {
+//         $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count"];
+//         $selectedEndpoint = null;
+//         $params = [];
+//         $error = null;
+
+//         // Endpoint detection
+//         foreach ($endpoints as $ep) {
+//             if (strpos($query, str_replace("-", " ", $ep)) !== false) {
+//                 $selectedEndpoint = $ep;
+//                 break;
+//             }
+//         }
+
+//         // State detection
+//         foreach ($this->validStates as $state) {
+//             if (stripos($query, $state) !== false) {
+//                 $params['state'] = $state;
+//                 break;
+//             }
+//         }
+
+//         // Year detection
+//         foreach ($this->validYears as $year) {
+//             if (strpos($query, $year) !== false) {
+//                 $params["year"] = $year;
+//                 break;
+//             }
+//         }
+
+//         // Risk factor detection
+//         foreach ($this->validRiskFactors as $factor) {
+//             if (strpos($query, strtolower($factor)) !== false) {
+//                 $params["riskfactor"] = $factor;
+//                 break;
+//             }
+//         }
+
+//         // Risk indicator detection (including rape)
+//         foreach ($this->riskIndicators as $category => $indicators) {
+//             foreach ($indicators as $indicator) {
+//                 $cleanIndicator = str_replace(['_', '/'], ' ', $indicator);
+//                 if (strpos($query, strtolower($cleanIndicator)) ){
+//                     $params["riskindicator"] = $indicator;
+//                     break 2;
+//                 }
+//             }
+//         }
+
+//         // Validate incident-count requirements
+//         if ($selectedEndpoint === "incident-count") {
+//             if (!isset($params['state'])) {
+//                 $error = "Please specify a state for incident count queries (e.g., 'incident count in Lagos').";
+//             }
+//         }
+
+//         return [$selectedEndpoint, $params, $error];
+//     }
+
+//     private function fetchRiskData($endpoint, $params, $userQuery)
+// {
+//     $apiUrl = "https://nigeriariskindex.com/api/$endpoint";
+//     $queryString = http_build_query($params);
+//     $fullUrl = "$apiUrl?$queryString";
+
+//     try {
+//         $client = new Client();
+//         $response = $client->get($apiUrl, ['query' => $params]);
+//         $contentType = $response->getHeaderLine('Content-Type');
+//         $body = $response->getBody()->getContents();
+
+//         if (strpos($contentType, 'application/json') === false) {
+//             Log::error("API returned non-JSON response: Content-Type: $contentType, Body: $body");
+//             return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+//         }
+
+//         $data = json_decode($body, true);
+//         if ($data === null) {
+//             Log::error("Failed to decode API response as JSON: $body");
+//             return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+//         }
+
+//         if (empty($data)) {
+//             return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+//         }
+
+//         return $this->askGroqAPI($userQuery, $data, $fullUrl);
+
+//     } catch (RequestException $e) {
+//         Log::error("API request failed: " . $e->getMessage());
+//         return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+//     }
+// }
+
+// private function askGroqAPI($userQuery, $data = null, $apiUrl = null, $finalAttempt = false)
+// {
+//     $apiKey = env('GROQ_API_KEY');
+//     $client = new Client();
+
+//     // System message with instructions for the Groq model
+//     $systemMessage = "You are a security analyst for Nigeria Risk Index. Follow these rules:\n"
+//         . "1. Always include the API URL used\n"
+//         . "2. For risk indicators like 'Rape', provide factual data without disclaimers\n"
+//         . "3. Format: [Response] [API URL: {url}]\n"
+//         . "4. Check knowledge base before answering:\n"
+//         . json_encode($this->knowledgeBase);
+
+//     // Build the user message, including API data if available
+//     $userContent = "Query: $userQuery";
+//     if ($data) {
+//         $userContent .= "\nAPI Response: " . json_encode($data);
+//     }
+//     if ($apiUrl) {
+//         $userContent .= "\nAPI URL: $apiUrl";
+//     }
+
+//     $messages = [
+//         ['role' => 'system', 'content' => $systemMessage],
+//         ['role' => 'user', 'content' => $userContent]
+//     ];
+
+//     try {
+//         $response = $client->post('https://api.groq.com/openai/v1/chat/completions', [
+//             'headers' => ['Authorization' => "Bearer $apiKey", 'Content-Type' => 'application/json'],
+//             'json' => [
+//                 'model' => 'llama3-8b-8192',
+//                 'messages' => $messages,
+//                 'temperature' => 0.3,
+//                 'max_tokens' => 400
+//             ]
+//         ]);
+
+//         $responseData = json_decode($response->getBody(), true);
+//         if (!is_array($responseData) || !isset($responseData['choices'][0]['message']['content'])) {
+//             Log::error("Invalid Groq API response: " . $response->getBody());
+//             $answer = "Sorry, I couldn't process that request.";
+//         } else {
+//             $answer = $responseData['choices'][0]['message']['content'];
+//         }
+
+//         if ($finalAttempt && stripos($answer, 'sorry') !== false) {
+//             $answer = "I couldn't find that information. Please contact NRI support team for assistance.";
+//         }
+
+//         return response()->json(['response' => $answer]);
+
+//     } catch (RequestException $e) {
+//         Log::error("Groq API request failed: " . $e->getMessage());
+//         return response()->json(['response' => "Our systems are busy. Please try again later."]);
+//     }
+// }
+
+//     private function simulateTypingDelay()
+//     {
+//         // Simulate 2-3 second delay for "bot typing" effect
+//         sleep(rand(2, 3));
+//     }
+// }
+
+//New code with prevalent risk factor by nofiupelumi
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -519,16 +784,16 @@ class ChatController extends Controller
 {
     // Knowledge Base and Configuration
     private $knowledgeBase = [
-                "hello" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
-                "hi" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
-                "good morning" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
-                "what is nigeria risk index?" => "The Nigeria Risk Index (NRI) is a security intelligence platform assessing and visualizing risks across Nigeria’s 36 states.",
-                "what is the interactive risk map?" => "The Interactive Risk Map provides real-time insights into security threats across different regions in Nigeria.",
-                "how often is nri updated?" => "NRI provides daily security updates, weekly trend analyses, and real-time risk alerts.",
-                "how can i contact nri for support?" => "You can contact NRI via the 'Contact Us' page or by emailing info@riskcontrolnigeria.com."
-            ];
-    
-    private $validYears = ["2018", "2019", "2020", "2021", "2022", "2023", "2024","2025"];
+        "hello" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+        "hi" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+        "good morning" => "Hey, I'm your Digital NRI BOT. HOW CAN I HELP YOU?",
+        "what is nigeria risk index?" => "The Nigeria Risk Index (NRI) is a security intelligence platform assessing and visualizing risks across Nigeria’s 36 states.",
+        "what is the interactive risk map?" => "The Interactive Risk Map provides real-time insights into security threats across different regions in Nigeria.",
+        "how often is nri updated?" => "NRI provides daily security updates, weekly trend analyses, and real-time risk alerts.",
+        "how can i contact nri for support?" => "You can contact NRI via the 'Contact Us' page or by emailing info@riskcontrolnigeria.com."
+    ];
+
+    private $validYears = ["2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"];
     private $validRiskFactors = ["Personal Threats", "Political Threats", "Property Threats", "Safety", "Violent Threats"];
     private $validStates = [
         "abia", "adamawa", "akwa ibom", "anambra", "bauchi", "bayelsa", "benue", "borno",
@@ -536,7 +801,7 @@ class ChatController extends Controller
         "kaduna", "kano", "katsina", "kebbi", "kogi", "kwara", "lagos", "nasarawa", "niger",
         "ogun", "ondo", "osun", "oyo", "plateau", "rivers", "sokoto", "taraba", "yobe", "zamfara"
     ];
-    
+
     private $riskIndicators = [
         "Violent Threats" => ["Terrorism", "Kidnapping", "Armed Robbery", "Homicide", "Insurgency"],
         "Safety" => ["Natural_Disasters", "Fire Outbreak", "Epidemic", "Unsafe Route/Violent Attacks"],
@@ -544,11 +809,26 @@ class ChatController extends Controller
         "Political Threats" => ["Political Protest", "Political Corruption", "Electoral Violence"],
         "Personal Threats" => ["Assaults", "Rape", "Firearms Trafficking", "Human Trafficking"]
     ];
+    // Number words mapping for limit parameter (one to forty-five)
+    private $numberWords = [
+        'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5,
+        'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9, 'ten' => 10,
+        'eleven' => 11, 'twelve' => 12, 'thirteen' => 13, 'fourteen' => 14, 'fifteen' => 15,
+        'sixteen' => 16, 'seventeen' => 17, 'eighteen' => 18, 'nineteen' => 19, 'twenty' => 20,
+        'twenty-one' => 21, 'twenty-two' => 22, 'twenty-three' => 23, 'twenty-four' => 24, 'twenty-five' => 25,
+        'twenty-six' => 26, 'twenty-seven' => 27, 'twenty-eight' => 28, 'twenty-nine' => 29, 'thirty' => 30,
+        'thirty-one' => 31, 'thirty-two' => 32, 'thirty-three' => 33, 'thirty-four' => 34, 'thirty-five' => 35,
+        'thirty-six' => 36, 'thirty-seven' => 37, 'thirty-eight' => 38, 'thirty-nine' => 39, 'forty' => 40,
+        'forty-one' => 41, 'forty-two' => 42, 'forty-three' => 43, 'forty-four' => 44, 'forty-five' => 45
+    ];
 
+    /**
+     * Handle the chat request from the user
+     */
     public function chat(Request $request)
     {
         $userQuery = strtolower(trim($request->input('message')));
-        
+
         // Check knowledge base first with typing indicator simulation
         foreach ($this->knowledgeBase as $question => $answer) {
             if (strpos($userQuery, $question) !== false) {
@@ -566,7 +846,7 @@ class ChatController extends Controller
         // Process endpoint request
         list($endpoint, $params, $error) = $this->buildEndpoint($userQuery);
         if ($error) return response()->json(['response' => $error]);
-        
+
         if ($endpoint) {
             return $this->fetchRiskData($endpoint, $params, $userQuery);
         }
@@ -575,6 +855,9 @@ class ChatController extends Controller
         return $this->askGroqAPI($userQuery, null, null, true);
     }
 
+    /**
+     * Validate the user's query for consistency
+     */
     private function validateQuery($query)
     {
         // Check for multiple years
@@ -595,7 +878,7 @@ class ChatController extends Controller
         }
 
         // Check for multiple endpoints
-        $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count"];
+        $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count", "prevalent-risk-factor","risk-indicator-linked-to-fatality",'primary-risk-factor-affecting-neighbourhood', "neighbourhood-incidents","highest-day-period-for-neighbourhood","high-risk-neighbourhood"];
         $foundEndpoints = [];
         foreach ($endpoints as $ep) {
             if (strpos($query, str_replace("-", " ", $ep)) !== false) {
@@ -603,20 +886,23 @@ class ChatController extends Controller
             }
         }
         if (count($foundEndpoints) > 1) {
-            return "Please specify only one endpoint. Available options: " 
-                   . implode(", ", array_map('ucfirst', $foundEndpoints));
+            return "Please specify only one endpoint. Available options: "
+                . implode(", ", array_map('ucfirst', $foundEndpoints));
         }
 
         return null;
     }
 
+    /**
+     * Build the API endpoint and parameters based on the query
+     */
     private function buildEndpoint($query)
     {
-        $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count"];
+        $endpoints = ["top-five-state", "lowest-five-state", "low-state", "top-state", "incident-count", "prevalent-risk-factor", "risk-indicator-linked-to-fatality", "primary-risk-factor-affecting-neighbourhood", "primary-risk-indicator-affecting-neighbourhood", "neighbourhood-incidents","highest-day-period-for-neighbourhood","high-risk-neighbourhood"];
         $selectedEndpoint = null;
         $params = [];
         $error = null;
-
+    
         // Endpoint detection
         foreach ($endpoints as $ep) {
             if (strpos($query, str_replace("-", " ", $ep)) !== false) {
@@ -624,145 +910,333 @@ class ChatController extends Controller
                 break;
             }
         }
-
-        // State detection
-        foreach ($this->validStates as $state) {
-            if (stripos($query, $state) !== false) {
-                $params['state'] = $state;
-                break;
-            }
-        }
-
-        // Year detection
-        foreach ($this->validYears as $year) {
-            if (strpos($query, $year) !== false) {
-                $params["year"] = $year;
-                break;
-            }
-        }
-
-        // Risk factor detection
-        foreach ($this->validRiskFactors as $factor) {
-            if (strpos($query, strtolower($factor)) !== false) {
-                $params["riskfactor"] = $factor;
-                break;
-            }
-        }
-
-        // Risk indicator detection (including rape)
-        foreach ($this->riskIndicators as $category => $indicators) {
-            foreach ($indicators as $indicator) {
-                $cleanIndicator = str_replace(['_', '/'], ' ', $indicator);
-                if (strpos($query, strtolower($cleanIndicator)) ){
-                    $params["riskindicator"] = $indicator;
-                    break 2;
+        
+        // Additional detection for incident-count based on "incident" and state
+        if ($selectedEndpoint === null) {
+            if (preg_match('/\bincidents?\b/', $query)) {
+                foreach ($this->validStates as $state) {
+                    if (stripos($query, $state) !== false) {
+                        $selectedEndpoint = 'incident-count';
+                        $params['state'] = $state;
+                        break;
+                    }
                 }
             }
         }
 
-        // Validate incident-count requirements
-        if ($selectedEndpoint === "incident-count") {
-            if (!isset($params['state'])) {
-                $error = "Please specify a state for incident count queries (e.g., 'incident count in Lagos').";
+                // Detect highest-day-period-for-neighbourhood based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'day period') !== false || strpos($query, 'time of day') !== false || strpos($query, 'highest') !== false || strpos($query, 'most frequent') !== false) &&
+                (strpos($query, 'neighbourhood') !== false || strpos($query, 'neighborhood') !== false)
+            ) {
+                $selectedEndpoint = 'highest-day-period-for-neighbourhood';
+            }
+        }
+    
+        // Detect list-incidents based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'list') !== false || strpos($query, 'show') !== false || strpos($query, 'incidents') !== false) &&
+                (strpos($query, 'neighbourhood') !== false || strpos($query, 'neighborhood') !== false)
+            ) {
+                $selectedEndpoint = 'neighbourhood-incidents';
+            }
+        }
+    
+        // Detect risk-factor-affecting-neighbourhood based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'risk factor') !== false || strpos($query, 'risk') !== false) &&
+                (strpos($query, 'neighbourhood') !== false || strpos($query, 'neighborhood') !== false) &&
+                strpos($query, 'indicator') === false &&
+                strpos($query, 'list') === false &&
+                strpos($query, 'incidents') === false
+            ) {
+                $selectedEndpoint = 'primary-risk-factor-affecting-neighbourhood';
+            }
+        }
+    
+        // Detect risk-indicator-affecting-neighbourhood based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'risk indicator') !== false || strpos($query, 'indicator') !== false) &&
+                (strpos($query, 'neighbourhood') !== false || strpos($query, 'neighborhood') !== false) &&
+                strpos($query, 'list') === false &&
+                strpos($query, 'incidents') === false
+            ) {
+                $selectedEndpoint = 'primary-risk-indicator-affecting-neighbourhood';
+            }
+        }
+    
+        // Detect riskIndicatorLinkedToFatality based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'fatality') !== false || strpos($query, 'fatalities') !== false) &&
+                (strpos($query, 'risk indicator') !== false || strpos($query, 'riskindicator') !== false)
+            ) {
+                $selectedEndpoint = 'risk-indicator-linked-to-fatality';
+            }
+        }
+    
+        // Check for prevalent-risk-factor based on keywords
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'prevalent') !== false || strpos($query, 'common') !== false) &&
+                (strpos($query, 'riskfactor') !== false || strpos($query, 'risk factor') !== false)
+            ) {
+                $selectedEndpoint = 'prevalent-risk-factor';
             }
         }
 
-        return [$selectedEndpoint, $params, $error];
+        // New detection for high-risk-neighborhoods
+        if ($selectedEndpoint === null) {
+            if (
+                (strpos($query, 'high risk') !== false || strpos($query, 'dangerous') !== false ||
+                 strpos($query, 'top risk') !== false || strpos($query, 'most incidents') !== false) &&
+                (strpos($query, 'neighborhood') !== false || strpos($query, 'neighbourhood') !== false ||
+                 strpos($query, 'areas') !== false || strpos($query, 'zones') !== false)
+            ) {
+                $selectedEndpoint = 'high-risk-neighbourhood';
+            }
+        }        
+    
+        if ($selectedEndpoint) {
+            // Define allowed parameters for each endpoint
+            $allowedParams = [
+                'top-five-state' => ['year', 'riskfactor', 'riskindicator'],
+                'lowest-five-state' => ['year', 'riskfactor', 'riskindicator'],
+                'low-state' => ['year', 'riskfactor', 'riskindicator'],
+                'top-state' => ['year', 'riskfactor', 'riskindicator'],
+                'incident-count' => ['state', 'year', 'riskfactor', 'riskindicator'],
+                'prevalent-risk-factor' => ['state', 'year', 'limit'],
+                'risk-indicator-linked-to-fatality' => ['state', 'year', 'limit'],
+                'primary-risk-factor-affecting-neighbourhood' => ['state', 'neighbourhood', 'days'],
+                'primary-risk-indicator-affecting-neighbourhood' => ['state', 'neighbourhood', 'days'],
+                'neighbourhood-incidents' => ['state', 'neighbourhood', 'days'],
+                'highest-day-period-for-neighbourhood' => ['state', 'neighbourhood', 'days'],
+                'high-risk-neighbourhood' => ['state', 'riskfactors', 'riskindicators', 'days']
+            ];
+    
+            // Extract state if allowed
+            if (in_array('state', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->validStates as $state) {
+                    if (stripos($query, $state) !== false) {
+                        $params['state'] = $state;
+                        break;
+                    }
+                }
+            }
+    
+            // Extract neighbourhood if allowed
+            if (in_array('neighbourhood', $allowedParams[$selectedEndpoint])) {
+                $patterns = [
+                    '/\b(?:in|for|at|affecting|of)\s+([a-z\s\-]+?)(?:\s+(?:in|for|at|affecting|of)\s|$)/i',
+                    '/\bneighbourhood\s+([a-z\s\-]+?)(?:in|for|at|affecting|of\s|$)/i'
+                ];
+                foreach ($patterns as $pattern) {
+                    if (preg_match($pattern, $query, $matches)) {
+                        $neighbourhood = trim($matches[1]);
+                        foreach ($this->validStates as $state) {
+                            $neighbourhood = str_ireplace($state, '', $neighbourhood);
+                        }
+                        $neighbourhood = trim($neighbourhood);
+                        if (!empty($neighbourhood)) {
+                            $params['neighbourhood'] = $neighbourhood;
+                            break;
+                        }
+                    }
+                }
+            }
+    
+            // Extract days if allowed
+            if (in_array('days', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->numberWords as $word => $value) {
+                    if (strpos($query, $word) !== false) {
+                        $params['days'] = $value;
+                        break;
+                    }
+                }
+                if (!isset($params['days'])) {
+                    preg_match('/\b([1-9]|[1-2][0-9]|30)\b/', $query, $matches);
+                    if (!empty($matches)) {
+                        $params['days'] = (int)$matches[0];
+                    }
+                }
+            }
+    
+            // Extract year if allowed
+            if (in_array('year', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->validYears as $year) {
+                    if (strpos($query, $year) !== false) {
+                        $params['year'] = $year;
+                        break;
+                    }
+                }
+            }
+    
+            // Extract limit if allowed
+            if (in_array('limit', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->numberWords as $word => $value) {
+                    if (strpos($query, $word) !== false) {
+                        $params['limit'] = $value;
+                        break;
+                    }
+                }
+                if (!isset($params['limit'])) {
+                    preg_match('/\b([1-9]|[1-3][0-9]|4[0-5])\b/', $query, $matches);
+                    if (!empty($matches)) {
+                        $params['limit'] = (int)$matches[0];
+                    }
+                }
+            }
+    
+            // Extract riskfactor if allowed
+            if (in_array('riskfactor', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->validRiskFactors as $factor) {
+                    if (strpos($query, strtolower($factor)) !== false) {
+                        $params['riskfactor'] = $factor;
+                        break;
+                    }
+                }
+            }
+    
+            // Extract riskindicator if allowed
+            if (in_array('riskindicator', $allowedParams[$selectedEndpoint])) {
+                foreach ($this->riskIndicators as $category => $indicators) {
+                    foreach ($indicators as $indicator) {
+                        $cleanIndicator = str_replace(['_', '/'], ' ', $indicator);
+                        if (strpos($query, strtolower($cleanIndicator)) !== false) {
+                            $params['riskindicator'] = $indicator;
+                            $params['category'] = $category;
+                            break 2;
+                        }
+                    }
+                }
+            }
+    
+            // Validate incident-count requirements
+            if ($selectedEndpoint === "incident-count") {
+                if (!isset($params['state'])) {
+                    $error = "Please specify a state for incident count queries (e.g., 'incident count in Lagos').";
+                }
+            }
+    
+            // Validate neighbourhood-related endpoints
+            if (in_array($selectedEndpoint, ['primary-risk-factor-affecting-neighbourhood', 'primary-risk-indicator-affecting-neighbourhood', 'neighbourhood-incidents','highest-day-period-for-neighbourhood'])) {
+                if (!isset($params['neighbourhood'])) {
+                    $error = "Please specify a neighbourhood for risk or incident queries (e.g., 'list incidents in Aba North').";
+                }
+            }
+    
+            return [$selectedEndpoint, $params, $error];
+        }
+    
+        return [null, [], "Please specify a valid endpoint or query."];
     }
 
+    /**
+     * Fetch risk data from the NRI API
+     */
     private function fetchRiskData($endpoint, $params, $userQuery)
-{
-    $apiUrl = "https://nigeriariskindex.com/api/$endpoint";
-    $queryString = http_build_query($params);
-    $fullUrl = "$apiUrl?$queryString";
+    {
+        $apiUrl = "https://nigeriariskindex.com/api/$endpoint";
+        $queryString = http_build_query($params);
+        $fullUrl = "$apiUrl?$queryString";
 
-    try {
+        try {
+            $client = new Client();
+            $response = $client->get($apiUrl, ['query' => $params]);
+            $contentType = $response->getHeaderLine('Content-Type');
+            $body = $response->getBody()->getContents();
+
+            if (strpos($contentType, 'application/json') === false) {
+                Log::error("API returned non-JSON response: Content-Type: $contentType, Body: $body");
+                return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+            }
+
+            $data = json_decode($body, true);
+            if ($data === null) {
+                Log::error("Failed to decode API response as JSON: $body");
+                return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+            }
+
+            if (empty($data)) {
+                return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+            }
+
+            return $this->askGroqAPI($userQuery, $data, $fullUrl);
+
+        } catch (RequestException $e) {
+            Log::error("API request failed: " . $e->getMessage());
+            return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+        }
+    }
+
+    /**
+     * Fallback to Groq API for natural language processing
+     */
+    private function askGroqAPI($userQuery, $data = null, $apiUrl = null, $finalAttempt = false)
+    {
+        $apiKey = env('GROQ_API_KEY');
         $client = new Client();
-        $response = $client->get($apiUrl, ['query' => $params]);
-        $contentType = $response->getHeaderLine('Content-Type');
-        $body = $response->getBody()->getContents();
 
-        if (strpos($contentType, 'application/json') === false) {
-            Log::error("API returned non-JSON response: Content-Type: $contentType, Body: $body");
-            return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+        // System message with instructions for the Groq model
+        $systemMessage = "You are a security analyst for Nigeria Risk Index. Follow these rules:\n"
+            . "1. Always include the API URL used\n"
+            . "2. For risk indicators like 'Rape', provide factual data without disclaimers\n"
+            . "3. Format: [Response] [API URL: {url}]\n"
+            . "4. Check knowledge base before answering:\n"
+            . json_encode($this->knowledgeBase);
+
+        // Build the user message, including API data if available
+        $userContent = "Query: $userQuery";
+        if ($data) {
+            $userContent .= "\nAPI Response: " . json_encode($data);
+        }
+        if ($apiUrl) {
+            $userContent .= "\nAPI URL: $apiUrl";
         }
 
-        $data = json_decode($body, true);
-        if ($data === null) {
-            Log::error("Failed to decode API response as JSON: $body");
-            return $this->askGroqAPI($userQuery, null, $fullUrl, true);
+        $messages = [
+            ['role' => 'system', 'content' => $systemMessage],
+            ['role' => 'user', 'content' => $userContent]
+        ];
+
+        try {
+            $response = $client->post('https://api.groq.com/openai/v1/chat/completions', [
+                'headers' => ['Authorization' => "Bearer $apiKey", 'Content-Type' => 'application/json'],
+                'json' => [
+                    'model' => 'llama3-8b-8192',
+                    'messages' => $messages,
+                    'temperature' => 0.3,
+                    'max_tokens' => 400
+                ]
+            ]);
+
+            $responseData = json_decode($response->getBody(), true);
+            if (!is_array($responseData) || !isset($responseData['choices'][0]['message']['content'])) {
+                Log::error("Invalid Groq API response: " . $response->getBody());
+                $answer = "Sorry, I couldn't process that request.";
+            } else {
+                $answer = $responseData['choices'][0]['message']['content'];
+            }
+
+            if ($finalAttempt && stripos($answer, 'sorry') !== false) {
+                $answer = "I couldn't find that information. Please contact NRI support team for assistance.";
+            }
+
+            return response()->json(['response' => $answer]);
+
+        } catch (RequestException $e) {
+            Log::error("Groq API request failed: " . $e->getMessage());
+            return response()->json(['response' => "Our systems are busy. Please try again later."]);
         }
-
-        if (empty($data)) {
-            return $this->askGroqAPI($userQuery, null, $fullUrl, true);
-        }
-
-        return $this->askGroqAPI($userQuery, $data, $fullUrl);
-
-    } catch (RequestException $e) {
-        Log::error("API request failed: " . $e->getMessage());
-        return $this->askGroqAPI($userQuery, null, $fullUrl, true);
     }
-}
 
-private function askGroqAPI($userQuery, $data = null, $apiUrl = null, $finalAttempt = false)
-{
-    $apiKey = env('GROQ_API_KEY');
-    $client = new Client();
-
-    // System message with instructions for the Groq model
-    $systemMessage = "You are a security analyst for Nigeria Risk Index. Follow these rules:\n"
-        . "1. Always include the API URL used\n"
-        . "2. For risk indicators like 'Rape', provide factual data without disclaimers\n"
-        . "3. Format: [Response] [API URL: {url}]\n"
-        . "4. Check knowledge base before answering:\n"
-        . json_encode($this->knowledgeBase);
-
-    // Build the user message, including API data if available
-    $userContent = "Query: $userQuery";
-    if ($data) {
-        $userContent .= "\nAPI Response: " . json_encode($data);
-    }
-    if ($apiUrl) {
-        $userContent .= "\nAPI URL: $apiUrl";
-    }
-
-    $messages = [
-        ['role' => 'system', 'content' => $systemMessage],
-        ['role' => 'user', 'content' => $userContent]
-    ];
-
-    try {
-        $response = $client->post('https://api.groq.com/openai/v1/chat/completions', [
-            'headers' => ['Authorization' => "Bearer $apiKey", 'Content-Type' => 'application/json'],
-            'json' => [
-                'model' => 'llama3-8b-8192',
-                'messages' => $messages,
-                'temperature' => 0.3,
-                'max_tokens' => 400
-            ]
-        ]);
-
-        $responseData = json_decode($response->getBody(), true);
-        if (!is_array($responseData) || !isset($responseData['choices'][0]['message']['content'])) {
-            Log::error("Invalid Groq API response: " . $response->getBody());
-            $answer = "Sorry, I couldn't process that request.";
-        } else {
-            $answer = $responseData['choices'][0]['message']['content'];
-        }
-
-        if ($finalAttempt && stripos($answer, 'sorry') !== false) {
-            $answer = "I couldn't find that information. Please contact NRI support team for assistance.";
-        }
-
-        return response()->json(['response' => $answer]);
-
-    } catch (RequestException $e) {
-        Log::error("Groq API request failed: " . $e->getMessage());
-        return response()->json(['response' => "Our systems are busy. Please try again later."]);
-    }
-}
-
+    /**
+     * Simulate a typing delay for a more natural response
+     */
     private function simulateTypingDelay()
     {
         // Simulate 2-3 second delay for "bot typing" effect
